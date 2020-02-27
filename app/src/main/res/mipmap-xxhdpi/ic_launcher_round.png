@@ -1,0 +1,262 @@
+package com.medianet.cajas.server;
+
+import android.app.Dialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
+import android.net.ConnectivityManager;
+import android.net.LinkAddress;
+import android.net.NetworkInfo;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
+import android.os.Build;
+import android.os.Bundle;
+import android.support.annotation.RequiresApi;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
+
+import android.support.v7.widget.Toolbar;
+import android.util.Log;
+import android.view.ContextThemeWrapper;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.ImageView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.android.newpos.pay.R;
+import com.android.newpos.pay.StartAppMEDIANET;
+import com.medianet.definesMEDIANET.DefinesMEDIANET;
+import com.medianet.menus.menus;
+
+
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.UnknownHostException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+
+import cn.desert.newpos.payui.master.MasterControl;
+
+import static com.android.newpos.pay.StartAppMEDIANET.VERSION;
+
+public class ServerActivity extends AppCompatActivity {
+
+    private static ThreadAttendRequest thread;
+    private ImageView config;
+    private TextView tv_versionC;
+    public static Dialog dialog;
+
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        setContentView(R.layout.activity_server_tcp);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        MasterControl.setMcontext(this);
+         agregarToolbar();
+         setVersionC();
+
+       if(thread == null){
+           thread = new ThreadAttendRequest(this);
+           thread.start();
+       }
+
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        menus.contFallback = 0;
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.M)
+    public void verConfig(View v){
+
+        String ip= getIP();
+        String puerto= String.valueOf(Server.PORT);
+
+        AlertDialog.Builder dialog= new AlertDialog.Builder(ServerActivity.this);
+        dialog.setTitle("Configuración  actual de Conexión");
+
+        if(ip.isEmpty()){
+            ip="No conectado a wifi";
+            puerto="";
+            dialog.setMessage("No conectado a la red Wifi");
+        }else{
+            dialog.setMessage("IP: -"+ip+"-\n"+"Puerto: "+puerto);
+        }
+
+       dialog.setPositiveButton("Aceptar", new DialogInterface.OnClickListener() {
+           @Override
+           public void onClick(DialogInterface dialog, int which) {
+               dialog.dismiss();
+           }
+       });
+       dialog.show();
+
+    }
+
+    /*
+    @RequiresApi(api = Build.VERSION_CODES.M)
+    public String getIP() {
+
+        WifiManager wifiMan = (WifiManager)getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        WifiInfo wifiInf = wifiMan.getConnectionInfo();
+        int ipAddress = wifiInf.getIpAddress();
+        String mask= wifiInf.toString();
+        String ip = String.format("%d.%d.%d.%d", (ipAddress & 0xff),(ipAddress >> 8 & 0xff),(ipAddress >> 16 & 0xff),(ipAddress >> 24 & 0xff));
+        Toast.makeText(getApplicationContext(), ip, Toast.LENGTH_LONG).show();
+        if(ip.equalsIgnoreCase("0.0.0.0")){
+            try{
+
+            } catch (Exception e) {
+          //      e.printStackTrace();
+            }
+
+        }
+
+        return ip;
+
+    }*/
+
+    public static String getIP(){
+        List<InetAddress> addrs;
+        String address = "";
+        try{
+            List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
+            for(NetworkInterface intf : interfaces){
+                addrs = Collections.list(intf.getInetAddresses());
+                for(InetAddress addr : addrs){
+                    if(!addr.isLoopbackAddress() && addr instanceof Inet4Address){
+                        address = addr.getHostAddress().toUpperCase(new Locale("es"));
+                    }
+                }
+            }
+        }catch (Exception e){
+            Log.w("IP: ", "Ex getting IP value " + e.getMessage());
+        }
+        return address;
+    }
+
+    private void settings() {
+        ToneGenerator toneG = new ToneGenerator(AudioManager.STREAM_ALARM, 100);
+        toneG.startTone(ToneGenerator.TONE_CDMA_PIP, 500);
+
+
+        Intent intent = new Intent();
+        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.setClass(ServerActivity.this, menus.class);
+        intent.putExtra(DefinesMEDIANET.DATO_MENU, DefinesMEDIANET.ITEM_COMUNICACION);
+        startActivity(intent);
+    }
+    //--------------------------------------TOOLBAR Y MENU-----------------------------------------//
+    private void agregarToolbar(){
+        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar_config);
+        setSupportActionBar(toolbar);
+        getSupportActionBar().setDisplayShowTitleEnabled(false);
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_main_conf, menu);
+        return true;
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.M)
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+
+        int id = item.getItemId();
+        //Se dirige a la ventana AccesoAdministrador
+        if(id == R.id.item_ip){
+            String ip= getIP();
+            String puerto= String.valueOf(Server.PORT);
+
+            android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(new ContextThemeWrapper(ServerActivity.this,
+                    R.style.DialogColor));
+            builder.setTitle("Información");
+            if(ip.isEmpty()){
+                puerto="";
+                builder.setMessage("No hay conexión a internet");
+            }else{
+                builder.setMessage("IP: "+ip+"\n"+"Puerto: "+puerto);
+            }
+
+            builder.setPositiveButton("Aceptar", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    dialog.dismiss();
+                }
+            });
+
+            dialog = builder.create();
+            dialog.setCancelable(false);
+
+              dialog.show() ;
+
+
+            // Cambia el color de la linea horizontal del  AlertDialog
+            pintarLineaDialogo(getApplicationContext(), dialog);
+            return true;
+        }
+        //Serial
+        if(id == R.id.item_ini){
+            Intent intent = new Intent();
+            intent.setClass(ServerActivity.this, menus.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.putExtra(DefinesMEDIANET.DATO_MENU, DefinesMEDIANET.ITEM_INI_CAJAS);
+            startActivity(intent);
+            finish();
+            return true;
+        }
+
+        return super.onOptionsItemSelected(item);
+    }
+
+
+    public static void pintarLineaDialogo(Context c, Dialog dialog) {
+
+        int titleDividerId = c.getResources().getIdentifier("titleDivider", "id", "android");
+        View titleDivider = dialog.findViewById(titleDividerId);
+        if (titleDivider != null)
+            titleDivider.setBackgroundColor(c.getResources().getColor(R.color.colorPrimaryDark));
+    }
+
+    private void setVersionC(){
+        this.tv_versionC = (TextView) findViewById(R.id.tv_versionC);
+
+        PackageInfo packageInfo = null;
+        try {
+            packageInfo = this.getPackageManager().getPackageInfo(getPackageName(), 0);
+        } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+        }
+        VERSION = packageInfo.versionName;
+
+        tv_versionC.setText(StartAppMEDIANET.CERT + StartAppMEDIANET.VERSION_CAJAS); //cuando se integre, se quita la version cajas y se usa la version normal
+
+    }
+
+
+   /* public void onBackPressed(){
+        return;
+
+    }
+*/
+
+
+}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
